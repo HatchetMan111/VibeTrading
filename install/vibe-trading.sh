@@ -27,7 +27,7 @@ RAW_BASE="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITH
 TARBALL="https://github.com/${GITHUB_USER}/${GITHUB_REPO}/archive/refs/heads/${GITHUB_BRANCH}.tar.gz"
 
 DEFAULT_CTID="${DEFAULT_CTID:-152}"
-DEFAULT_HOSTNAME="${DEFAULT_HOSTNAME:-vibe-trading}"
+DEFAULT_HOSTNAME="${DEFAULT_HOSTNAME:-VibeTrading}"
 DEFAULT_CORES="${DEFAULT_CORES:-4}"
 DEFAULT_MEMORY="${DEFAULT_MEMORY:-4096}"     # MB (Build braucht RAM: Node 22 + pip-Locks)
 DEFAULT_DISK="${DEFAULT_DISK:-20}"           # GB (Upstream + venv + frontend/dist + Runs)
