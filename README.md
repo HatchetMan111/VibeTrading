@@ -67,16 +67,18 @@ Danach läuft vollautomatisch:
 Web UI öffnen → **Schritt 1**: Settings → Provider + API-Key eintragen
 (z. B. OpenRouter) → **Schritt 2**: Research/Backtest starten → Reports ansehen.
 
-## 2 · Update
+## 2 · Update / neuer Container
 
-Einfach den Einzeiler erneut ausführen — bei existierender CT-ID wird
-automatisch der **Update-Modus** angeboten (Container bleibt, Upstream wird
-gepullt, Deps + Frontend neu gebaut, Service restartet). Idempotent.
+**Update im bestehenden Container** (Upstream pull, Deps + Frontend neu,
+Service restart — `setup-container.sh` ist idempotent, mehrfach lauffähig):
 
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/HatchetMan111/VibeTrading/main/install/vibe-trading.sh)"
-# -> "CT 152 existiert. Setup erneut ausführen (Update)?" -> Ja
+pct exec 152 -- bash /opt/vibe-trading/setup-container.sh
 ```
+
+**Neuer Container:** Einfach den Einzeiler erneut ausführen — ist die
+angefragte CT-ID belegt, wird **automatisch die nächste freie genommen**
+(z. B. 152 belegt → 153), ohne Rückfrage.
 
 ## 3 · Deinstallation
 

@@ -13,7 +13,7 @@
 #      als systemd-Service (Web UI = native Vibe-Trading UI, alles einstellbar)
 #   5. Verifiziert Service + HTTP und gibt die finale URL aus
 #
-# Idempotent: existiert die CT-ID bereits, wird Update statt Neuanlage angeboten.
+# Kollisionssicher: ist die CT-ID belegt, wird automatisch die nächste freie genommen.
 # Debugging:  DEBUG=1 bash -x install/vibe-trading.sh   (volles Trace-Log)
 # =============================================================================
 set -euo pipefail
@@ -85,25 +85,17 @@ ask TPL_STORAGE "Storage für Templates"              "${DEFAULT_TEMPLATE_STORAG
 ask BRIDGE      "Netzwerk-Bridge"                    "${DEFAULT_BRIDGE}"
 ask WEB_PORT    "Web-UI-Port"                        "${DEFAULT_WEB_PORT}"
 
-# --- Existiert CT-ID bereits? -> Update-Pfad (idempotent) ----------------------
-if pct status "${CTID}" >/dev/null 2>&1; then
-  echo "CT ${CTID} existiert bereits."
-  REUSE="update"
-  if command -v whiptail >/dev/null; then
-    whiptail --yesno "CT ${CTID} existiert. Setup im Container erneut ausführen (Update)?" 8 70 \
-      && REUSE="update" || REUSE="abort"
-  else
-    read -rp "Setup erneut ausführen (Update)? [J/n]: " ans
-    [[ "${ans:-J}" =~ ^[Nn] ]] && REUSE="abort" || REUSE="update"
-  fi
-  if [[ "${REUSE}" == "update" ]]; then
-    echo "-> Update-Modus: Container wird wiederverwendet."
-  else
-    echo "Abgebrochen. Andere CT-ID wählen."; exit 0
-  fi
-else
-  REUSE="create"
-fi
+# --- CT-ID belegt? -> automatisch nächste freie nehmen ---------------------------
+[[ "${CTID}" =~ ^[0-9]+$ ]] || { echo "CT-ID muss numerisch sein (bekommen: '${CTID}')." >&2; exit 1; }
+TRIES=0
+while pct status "${CTID}" >/dev/null 2>&1; do
+  echo "-> CT ${CTID} ist belegt, nehme nächste freie ..."
+  CTID=$((CTID + 1))
+  TRIES=$((TRIES + 1))
+  if (( CTID > 999999999 )); then echo "Keine freie CT-ID mehr (Limit 999999999 erreicht)." >&2; exit 1; fi
+  if (( TRIES > 500 )); then echo "Nach 500 Versuchen keine freie CT-ID gefunden." >&2; exit 1; fi
+done
+echo "-> Verwende CT-ID ${CTID}."
 
 # --- Template sicherstellen ----------------------------------------------------
 echo "-> Suche Debian-12-Template in ${TPL_STORAGE} ..."
@@ -117,26 +109,21 @@ if [[ -z "${TEMPLATE:-}" ]]; then
 fi
 echo "-> Template: ${TEMPLATE}"
 
-# --- Container erstellen (nur wenn neu) ----------------------------------------
-if [[ "${REUSE}" == "create" ]]; then
-  echo "-> Erstelle LXC ${CTID} (${CORES} CPU / ${MEMORY} MB / ${DISK} GB) ..."
-  pct create "${CTID}" "${TPL_STORAGE}:vztmpl/${TEMPLATE}" \
-    --hostname "${HOSTNAME}" \
-    --cores "${CORES}" --memory "${MEMORY}" \
-    --rootfs "${STORAGE}:${DISK}" \
-    --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp" \
-    --onboot 1 --start 1 \
-    --unprivileged 1 \
-    --features nesting=1
-  # onboot doppelt absichern (Config-Key)
-  grep -q "^onboot:" "/etc/pve/lxc/${CTID}.conf" \
-    || echo "onboot: 1" >> "/etc/pve/lxc/${CTID}.conf"
-  echo "-> Warte auf Container-Boot ..."
-  sleep 8
-else
-  pct start "${CTID}" 2>/dev/null || true
-  sleep 5
-fi
+# --- Container erstellen ---------------------------------------------------------
+echo "-> Erstelle LXC ${CTID} (${CORES} CPU / ${MEMORY} MB / ${DISK} GB) ..."
+pct create "${CTID}" "${TPL_STORAGE}:vztmpl/${TEMPLATE}" \
+  --hostname "${HOSTNAME}" \
+  --cores "${CORES}" --memory "${MEMORY}" \
+  --rootfs "${STORAGE}:${DISK}" \
+  --net0 "name=eth0,bridge=${BRIDGE},ip=dhcp" \
+  --onboot 1 --start 1 \
+  --unprivileged 1 \
+  --features nesting=1
+# onboot doppelt absichern (Config-Key)
+grep -q "^onboot:" "/etc/pve/lxc/${CTID}.conf" \
+  || echo "onboot: 1" >> "/etc/pve/lxc/${CTID}.conf"
+echo "-> Warte auf Container-Boot ..."
+sleep 8
 
 pct exec "${CTID}" -- bash -c "echo Container erreichbar: \$(hostname) \$(hostname -I | awk '{print \$1}')"
 
@@ -191,7 +178,8 @@ echo " ✅ Fertig! Vibe-Trading Web UI: http://${CT_IP}:${WEB_PORT}"
 echo "    CT-ID ${CTID} (${HOSTNAME}), onboot=1, Service=vibe-trading"
 echo "    Alles einstellbar in der Web UI (Provider, Modelle, Keys, Research,"
 echo "    Backtests, Scheduled, Settings) — siehe README."
-echo "    Update : Einzeiler erneut laufen lassen (Update-Modus)"
+echo "    Update im Container: pct exec ${CTID} -- bash /opt/vibe-trading/setup-container.sh"
+echo "    Neuer Container      : Einzeiler erneut (nächste freie CT-ID wird auto-gewählt)"
 echo "    Logs   : pct exec ${CTID} -- journalctl -u vibe-trading -f"
 echo "    Löschen: pct stop ${CTID} && pct destroy ${CTID}"
 echo "=================================================================="
