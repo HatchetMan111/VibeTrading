@@ -1,0 +1,19 @@
+[Unit]
+Description=Vibe-Trading Server (Proxmox LXC, native Web UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vibe-trading/upstream
+Environment=PYTHONUNBUFFERED=1
+Environment=VIBE_TRADING_HOME=/root/.vibe-trading
+ExecStart=/opt/vibe-trading/venv/bin/vibe-trading serve --host 0.0.0.0 --port 8899
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
